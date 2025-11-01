@@ -3,6 +3,12 @@ node_modules/
 
 # Environment variables
 .env
+clean-comments.js
+create-config.js
+delete-commands.js
+register-commands.js
+update-config-v2.js
+update-config.js
 
 # Logs
 npm-debug.log*
