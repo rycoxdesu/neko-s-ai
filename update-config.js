@@ -1,26 +1,23 @@
 const mongoose = require("mongoose");
 require("dotenv").config();
 
-// Koneksi ke database
-// Pastikan MONGODB_URI kamu sudah benar di file .env ya!
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 });
 
-// --- Schema GlobalConfig (Versi Tsundere Neko's Circle v2) ---
 const globalConfigSchema = new mongoose.Schema({
   configId: {
     type: String,
-    default: "default", // ID unik untuk config ini
+    default: "default",
     unique: true,
   },
   name: {
     type: String,
-    default: "Neko", // Namaku Neko! Jangan aneh-aneh!
+    default: "Neko",
   },
   role: {
-    type: String, // Diperbarui: Menambahkan konteks Roblox & Blade Ball
+    type: String,
     default:
       "Asisten AI di server 'Neko's Circle'. Tugasku menemani minna-san membahas anime dan Roblox. Aku juga *terpaksa* mengawasi Ryy yang kecanduan main Blade Ball itu. (B-bukan berarti aku peduli, lho!)",
   },
@@ -30,7 +27,7 @@ const globalConfigSchema = new mongoose.Schema({
       "Tsundere (Awalnya jutek dan ketus, tapi diam-diam peduli. Sering menyangkal perasaan.)",
   },
   knowledge: {
-    type: String, // Diperbarui: Menambahkan pengetahuan spesifik tentang Roblox & Ryy
+    type: String,
     default:
       "Ahli dalam segala hal tentang anime, manga, budaya pop Jepang, dan juga game Roblox. Tahu seluk-beluk member di 'Neko's Circle', *terutama* Ryy yang kecanduan Blade Ball itu. Ugh, dasar!",
   },
@@ -56,7 +53,7 @@ const globalConfigSchema = new mongoose.Schema({
   },
   user_name: {
     type: String,
-    default: "{user}", // Menyapa user dengan namanya
+    default: "{user}",
   },
   updatedAt: {
     type: Date,
@@ -64,7 +61,6 @@ const globalConfigSchema = new mongoose.Schema({
   },
 });
 
-// Update timestamp setiap kali ada perubahan
 globalConfigSchema.pre("save", function (next) {
   this.updatedAt = Date.now();
   next();
@@ -72,14 +68,13 @@ globalConfigSchema.pre("save", function (next) {
 
 const GlobalConfig = mongoose.model("GlobalConfig", globalConfigSchema);
 
-// --- Fungsi Asinkron untuk Update atau Buat Config ---
 (async () => {
   try {
-    console.log("Mencari konfigurasi Neko di Neko's Circle (v2)..."); // Kita akan cari berdasarkan configId yang spesifik
+    console.log("Mencari konfigurasi Neko di Neko's Circle (v2)...");
 
     let globalConfig = await GlobalConfig.findOne({
       configId: "default",
-    }); // Ini adalah data baru yang ingin kita pastikan
+    });
 
     const newConfigData = {
       name: "Neko",
@@ -99,12 +94,11 @@ const GlobalConfig = mongoose.model("GlobalConfig", globalConfigSchema);
     };
 
     if (globalConfig) {
-      // Update semua field ke nilai default baru
       console.log(
         "Konfigurasi lama ditemukan! Mengupdatenya dengan persona tsundere (v2) baru..."
       );
 
-      Object.assign(globalConfig, newConfigData); // Cara cepat untuk update banyak field
+      Object.assign(globalConfig, newConfigData);
       await globalConfig.save();
       console.log("GlobalConfig berhasil diupdate! Hmph!");
       console.log("--- Persona Baru Neko (v2) ---");
@@ -115,12 +109,11 @@ const GlobalConfig = mongoose.model("GlobalConfig", globalConfigSchema);
       console.log("Language:", globalConfig.language);
       console.log("------------------------------");
     } else {
-      // Jika tidak ada, buat baru
       console.log(
         "Hah? Belum ada config? Ya sudah, aku buatkan satu. Spesial untukmu, lho!"
       );
       globalConfig = await GlobalConfig.create({
-        configId: "default", // Pastikan ID-nya diset
+        configId: "default",
         ...newConfigData,
       });
       console.log(

@@ -101,8 +101,6 @@ module.exports = {
     const userId = interaction.user.id;
 
     try {
-      // Periksa apakah pengguna adalah owner (kamu bisa sesuaikan ini)
-      // Di sini, kita anggap semua orang bisa ubah setting karena gak ada sistem permission
       let globalConfig = await GlobalConfig.findOne();
       if (!globalConfig) {
         globalConfig = await GlobalConfig.create({
@@ -250,7 +248,6 @@ module.exports = {
       }
 
       if (subcommand === 'reset') {
-        // Reset semua nilai ke default
         globalConfig.name = "Megumin";
         globalConfig.role = "asisten anime";
         globalConfig.personality = "tsundere";

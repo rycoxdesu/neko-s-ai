@@ -27,25 +27,21 @@ module.exports = {
     try {
       const prompt = interaction.options.getString('prompt');
       const userId = interaction.user.id;
-      // Coba ambil display name dari member, kalau gak ada pake username
       let displayName = interaction.user.username;
       if (interaction.member && interaction.member.displayName) {
         displayName = interaction.member.displayName;
       }
-      // Cek apakah pengguna adalah Ryy berdasarkan username atau nickname
       const isRyy = displayName.toLowerCase().includes('ryy') || 
                     interaction.user.username.toLowerCase().includes('ryy') ||
-                    interaction.user.id === process.env.RYY_USER_ID; // Jika kamu ingin spesifik berdasarkan ID
-      const username = isRyy ? 'Ryy' : displayName; // Selalu panggil "Ryy" kalau pengguna adalah Ryy
+                    interaction.user.id === process.env.RYY_USER_ID;
+      const username = isRyy ? 'Ryy' : displayName;
       
-      // Dapatkan atau buat sesi percakapan untuk pengguna
       let conversation = await Conversation.findOne({ 
         userId: userId, 
         isActive: true 
       });
       
       if (!conversation) {
-        // Buat sesi baru jika belum ada
         const sessionId = `session-${uuidv4().slice(0, 8)}`;
         conversation = new Conversation({
           userId: userId,
@@ -55,10 +51,8 @@ module.exports = {
         await conversation.save();
       }
       
-      // Dapatkan konfigurasi global (default) atau buat baru jika belum ada
       let globalConfig = await GlobalConfig.findOne();
       if (!globalConfig) {
-        // Buat konfigurasi global default jika belum ada
         globalConfig = await GlobalConfig.create({
           name: "Neko",
           role: "asisten anime dan main Ryy",
@@ -72,7 +66,6 @@ module.exports = {
         });
       }
       
-      // Logging untuk debugging
       console.log('Global Config diambil di command ai:', {
         name: globalConfig.name,
         role: globalConfig.role,
@@ -80,7 +73,6 @@ module.exports = {
         language: globalConfig.language
       });
       
-      // Gunakan konfigurasi langsung tanpa default karena field seharusnya udah ada di schema
       const config = {
         name: globalConfig.name,
         role: globalConfig.role,
@@ -95,13 +87,11 @@ module.exports = {
         other_users_behavior: globalConfig.other_users_behavior
       };
       
-      // Tambahkan pesan pengguna ke percakapan
       conversation.messages.push({
         role: 'user',
         content: prompt
       });
       
-      // Buat konteks berdasarkan konfigurasi global
       const context = 
         `Kamu adalah ${config.name}, seorang ${config.role.split('.')[0]}. ` +
         `Kepribadianmu ${config.personality.split('(')[0]}. ` +
@@ -113,7 +103,6 @@ module.exports = {
           ? ` Saat bicara dengan Ryy: lebih tsundere, marahin dia main Blade Ball, tapi peduli diam-diam.`
           : ` Saat bicara dengan lainnya: tsundere tapi lebih pelan.`);
       
-      // Gabungkan semua pesan sebelumnya dengan konteks dan pesan baru
       let fullPrompt = context + '\n\nRiwayat percakapan:\n';
       for (const msg of conversation.messages) {
         const role = msg.role === 'user' ? 'Pengguna' : 'Assistant';
@@ -122,12 +111,10 @@ module.exports = {
       
       fullPrompt += '\nAssistant: (Balaslah sesuai kepribadian dan aturan di atas, dengan mempertimbangkan riwayat percakapan)';
       
-      // Gunakan model tanpa system instruction untuk lebih kompatibel
       const model = genAI.getGenerativeModel({ 
         model: 'gemini-2.5-flash',
-        // Tambahkan timeout yang lebih lama
         requestOptions: {
-          timeout: 30000, // 30 detik
+          timeout: 30000,
         }
       });
       
@@ -136,14 +123,12 @@ module.exports = {
       const text = response.text();
       
       if (text) {
-        // Tambahkan respon bot ke percakapan
         conversation.messages.push({
-          role: 'model', // Gemini menggunakan 'model' bukan 'assistant'
+          role: 'model',
           content: text
         });
         
-        // Batasi jumlah pesan dalam sesi untuk menghindari prompt yang terlalu panjang
-        if (conversation.messages.length > 20) { // Batasi 20 pesan terakhir
+        if (conversation.messages.length > 20) {
           conversation.messages = conversation.messages.slice(-20);
         }
         
@@ -170,12 +155,11 @@ module.exports = {
     } catch (error) {
       console.error('Error with AI command:', error);
       
-      // Cek apakah errornya karena timeout
       if (error.message && (error.message.includes('timeout') || error.message.includes('Connect Timeout'))) {
         const errorEmbed = new EmbedBuilder()
           .setTitle('Sedang Sibuk~')
           .setDescription(`Maaf ${username}, aku sedang sibuk sekarang. Coba tanya lagi nanti yaa~ (¬_¬)`)
-          .setColor('#FFA500') // Oranye untuk warning
+          .setColor('#FFA500')
           .setTimestamp();
         
         await interaction.editReply({ embeds: [errorEmbed] });

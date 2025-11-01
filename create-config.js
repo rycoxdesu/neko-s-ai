@@ -1,13 +1,11 @@
 const mongoose = require("mongoose");
 require("dotenv").config();
 
-// Koneksi ke database
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 });
 
-// Schema GlobalConfig sesuai dengan yang terbaru
 const globalConfigSchema = new mongoose.Schema({
   configId: {
     type: String,
@@ -79,7 +77,6 @@ const GlobalConfig = mongoose.model("GlobalConfig", globalConfigSchema);
   try {
     console.log("Mengecek apakah sudah ada GlobalConfig...");
 
-    // Hapus semua entri lama (jika ada) dan buat yang baru sesuai schema
     await GlobalConfig.deleteMany({});
 
     console.log("Membuat GlobalConfig baru dengan schema terbaru...");

@@ -39,7 +39,6 @@ const conversationSchema = new mongoose.Schema({
   }
 });
 
-// Update timestamp saat disimpan
 conversationSchema.pre('save', function(next) {
   this.updatedAt = Date.now;
   next();

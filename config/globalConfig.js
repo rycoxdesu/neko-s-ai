@@ -56,7 +56,6 @@ const globalConfigSchema = new mongoose.Schema({
   },
 });
 
-// Update timestamp sebelum disimpan
 globalConfigSchema.pre("save", function (next) {
   this.updatedAt = Date.now;
   next();
