@@ -86,3 +86,11 @@ Thumbs.db
 # Build outputs
 dist/
 build/
+
+# Helper scripts
+clean-comments.js
+create-config.js
+delete-commands.js
+register-commands.js
+update-config-v2.js
+update-config.js
