@@ -15,8 +15,9 @@ require("dotenv").config();
 const connectDB = require("./config/database");
 const Logger = require("./utils/logger");
 const DiscordLogger = require("./utils/discordLogger");
-const GlobalConfig = require("./config/globalConfig");
 const Conversation = require("./config/conversation");
+const ConfigManager = require('./utils/ConfigManager');
+const { handleKeywordCommands } = require('./utils/keywordCommands');
 
 const client = new Client({
   intents: [
@@ -31,18 +32,19 @@ let discordLogger;
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-client.commands = new Collection();
-const commandsPath = path.join(__dirname, "commands");
-const commandFiles = fs
-  .readdirSync(commandsPath)
-  .filter((file) => file.endsWith(".js"));
-
-for (const file of commandFiles) {
-  const filePath = path.join(commandsPath, file);
-  const command = require(filePath);
-  client.commands.set(command.data.name, command);
-  Logger.log(`Loaded command: ${command.data.name}`);
-}
+// Karena hanya menggunakan mention/reply/kata kunci, tidak perlu memuat command slash
+// client.commands = new Collection();
+// const commandsPath = path.join(__dirname, "commands");
+// const commandFiles = fs
+//   .readdirSync(commandsPath)
+//   .filter((file) => file.endsWith(".js"));
+// 
+// for (const file of commandFiles) {
+//   const filePath = path.join(commandsPath, file);
+//   const command = require(filePath);
+//   client.commands.set(command.data.name, command);
+//   Logger.log(`Loaded command: ${command.data.name}`);
+// }
 
 connectDB();
 
@@ -53,65 +55,56 @@ client.once(Events.ClientReady, async () => {
   await discordLogger.success(`🤖 ${client.user.tag} is online!`);
 
   try {
-    const allConfigs = await GlobalConfig.find({});
-    console.log(`Jumlah GlobalConfig di database: ${allConfigs.length}`);
-    if (allConfigs.length > 0) {
-      allConfigs.forEach((config, index) => {
-        console.log(`GlobalConfig ${index + 1}:`, {
-          id: config._id,
-          name: config.name,
-          role: config.role,
-          personality: config.personality,
-          language: config.language,
-          updatedAt: config.updatedAt,
-        });
-      });
-    } else {
-      console.log(
-        "Belum ada GlobalConfig di database, akan dibuat saat pertama kali dipanggil"
-      );
-    }
+    const configManager = new ConfigManager();
+    const config = await configManager.readConfig();
+    console.log('Konfigurasi Global dari file JSON:', {
+      name: config.name,
+      role: config.role,
+      personality: config.personality,
+      language: config.language,
+    });
   } catch (error) {
-    console.error("Error saat mengambil GlobalConfig:", error);
+    console.error("Error saat membaca konfigurasi:", error);
   }
 
-  try {
-    const commands = [];
-    const commandsPath = path.join(__dirname, "commands");
-    const commandFiles = fs
-      .readdirSync(commandsPath)
-      .filter((file) => file.endsWith(".js"));
-
-    for (const file of commandFiles) {
-      const filePath = path.join(commandsPath, file);
-      const command = require(filePath);
-      commands.push(command.data.toJSON());
-    }
-
-    const rest = new REST({ version: "10" }).setToken(
-      process.env.DISCORD_TOKEN
-    );
-
-    Logger.log(
-      `Started refreshing ${commands.length} application (/) commands.`
-    );
-
-    const data = await rest.put(
-      Routes.applicationGuildCommands(
-        process.env.CLIENT_ID,
-        process.env.GUILD_ID
-      ),
-      { body: commands }
-    );
-
-    Logger.log(
-      `Successfully reloaded ${data.length} application (/) commands.`
-    );
-  } catch (error) {
-    Logger.error("Error registering commands:", error);
-    if (discordLogger)
-      await discordLogger.error(`Error registering commands: ${error.message}`);
-  }
+  // Kode registrasi command dihapus karena tidak lagi menggunakan command slash
+  // try {
+  //   const commands = [];
+  //   const commandsPath = path.join(__dirname, "commands");
+  //   const commandFiles = fs
+  //     .readdirSync(commandsPath)
+  //     .filter((file) => file.endsWith(".js"));
+  // 
+  //   for (const file of commandFiles) {
+  //     const filePath = path.join(commandsPath, file);
+  //     const command = require(filePath);
+  //     commands.push(command.data.toJSON());
+  //   }
+  // 
+  //   const rest = new REST({ version: "10" }).setToken(
+  //     process.env.DISCORD_TOKEN
+  //   );
+  // 
+  //   Logger.log(
+  //     `Started refreshing ${commands.length} application (/) commands.`
+  //   );
+  // 
+  //   const data = await rest.put(
+  //     Routes.applicationGuildCommands(
+  //       process.env.CLIENT_ID,
+  //       process.env.GUILD_ID
+  //     ),
+  //     { body: commands }
+  //   );
+  // 
+  //   Logger.log(
+  //     `Successfully reloaded ${data.length} application (/) commands.`
+  //   );
+  // } catch (error) {
+  //   Logger.error("Error registering commands:", error);
+  //   if (discordLogger)
+  //     await discordLogger.error(`Error registering commands: ${error.message}`);
+  // }
 
   client.user.setActivity({
     name: "AI with | Neko's Circle",
@@ -121,45 +114,45 @@ client.once(Events.ClientReady, async () => {
   Logger.log("Bot is ready and listening for commands!");
 });
 
-client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-
-  const command = client.commands.get(interaction.commandName);
-
-  if (!command) {
-    Logger.warn(`Command ${interaction.commandName} not found`);
-    if (discordLogger)
-      await discordLogger.warn(`Command ${interaction.commandName} not found`);
-    return;
-  }
-
-  try {
-    await command.execute(interaction);
-    Logger.log(
-      `Executed command: ${interaction.commandName} by ${interaction.user.tag}`
-    );
-  } catch (error) {
-    Logger.error(
-      `Error executing command ${interaction.commandName}: ${error.message}`
-    );
-    if (discordLogger)
-      await discordLogger.error(
-        `Error executing command ${interaction.commandName}: ${error.message}`
-      );
-
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({
-        content: "There was an error while executing this command!",
-        ephemeral: true,
-      });
-    } else {
-      await interaction.reply({
-        content: "There was an error while executing this command!",
-        ephemeral: true,
-      });
-    }
-  }
-});
+// client.on(Events.InteractionCreate, async (interaction) => {
+//   if (!interaction.isChatInputCommand()) return;
+// 
+//   const command = client.commands.get(interaction.commandName);
+// 
+//   if (!command) {
+//     Logger.warn(`Command ${interaction.commandName} not found`);
+//     if (discordLogger)
+//       await discordLogger.warn(`Command ${interaction.commandName} not found`);
+//     return;
+//   }
+// 
+//   try {
+//     await command.execute(interaction);
+//     Logger.log(
+//       `Executed command: ${interaction.commandName} by ${interaction.user.tag}`
+//     );
+//   } catch (error) {
+//     Logger.error(
+//       `Error executing command ${interaction.commandName}: ${error.message}`
+//     );
+//     if (discordLogger)
+//       await discordLogger.error(
+//         `Error executing command ${interaction.commandName}: ${error.message}`
+//       );
+// 
+//     if (interaction.replied || interaction.deferred) {
+//       await interaction.followUp({
+//         content: "There was an error while executing this command!",
+//         ephemeral: true,
+//       });
+//     } else {
+//       await interaction.reply({
+//         content: "There was an error while executing this command!",
+//         ephemeral: true,
+//       });
+//     }
+//   }
+// });
 
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
@@ -179,6 +172,15 @@ client.on(Events.MessageCreate, async (message) => {
     containsNeko
   ) {
     try {
+      // Periksa apakah pesan mengandung kata kunci neko add role sebelum melanjutkan
+      const content = message.content.toLowerCase();
+      if (content.includes('neko add role')) {
+        const configManager = new ConfigManager();
+        const config = await configManager.readConfig();
+        await handleKeywordCommands(message, config);
+        return; // Hentikan eksekusi di sini, jangan lanjut ke AI
+      }
+
       let prompt = "";
 
       if (
@@ -228,63 +230,34 @@ client.on(Events.MessageCreate, async (message) => {
             await conversation.save();
           }
 
-          let globalConfig = await GlobalConfig.findOne();
-          if (!globalConfig) {
-            globalConfig = await GlobalConfig.create({
-              name: "Neko",
-              role: "asisten anime dan main Ryy",
-              personality: "tsundere",
-              knowledge: "anime",
-              limitations: "tidak mengujar kebencian",
-              language: "Bahasa Indonesia dengan kata-kata Jepang",
-              tone: "kawaii dan ekpresif",
-              format_response: "jawaban dengan gaya anime yang ekspresif",
-              user_name: "{user}",
-            });
-          }
+          const configManager = new ConfigManager();
+          const config = await configManager.readConfig();
 
           console.log("Global Config diambil:", {
-            name: globalConfig.name,
-            role: globalConfig.role,
-            personality: globalConfig.personality,
-            language: globalConfig.language,
+            name: config.name,
+            role: config.role,
+            personality: config.personality,
+            language: config.language,
           });
-
-          const config = {
-            name: globalConfig.name,
-            role: globalConfig.role,
-            personality: globalConfig.personality,
-            knowledge: globalConfig.knowledge,
-            limitations: globalConfig.limitations,
-            language: globalConfig.language,
-            tone: globalConfig.tone,
-            format_response: globalConfig.format_response,
-            user_name: globalConfig.user_name,
-            ryy_special_behavior: globalConfig.ryy_special_behavior,
-            other_users_behavior: globalConfig.other_users_behavior,
-          };
 
           conversation.messages.push({
             role: "user",
             content: prompt,
           });
 
-          const context =
-            `Kamu adalah ${config.name}, seorang ${
-              config.role.split(".")[0]
-            }. ` +
-            `Kepribadianmu ${config.personality.split("(")[0]}. ` +
-            `Gunakan bahasa ${config.language}. ` +
-            `Panggil pengguna dengan sebutan '${config.user_name.replace(
-              /{user}/g,
-              username
-            )}'. ` +
-            `Responsmu ${config.format_response.split(".")[0]}. ` +
-            `Selalu sertakan emoji anime dan ekspresi tsundere.` +
-            (username.toLowerCase() === "ryy" ||
-            message.author.id === process.env.RYY_USER_ID
-              ? ` Saat bicara dengan Ryy: lebih tsundere, marahin dia main Blade Ball, tapi peduli diam-diam.`
-              : ` Saat bicara dengan lainnya: tsundere tapi lebih pelan.`);
+          const context = 
+            `Nama: ${config.name}\n` +
+            `Role: ${config.role}\n` +
+            `Kepribadian: ${config.personality}\n` +
+            `Pengetahuan: ${config.knowledge}\n` +
+            `Bahasa: ${config.language}\n` +
+            `Nada bicara: ${config.tone}\n` +
+            `Format jawaban: ${config.format_response}\n` +
+            `Panggilan: ${config.user_name.replace(/{user}/g, username)}\n` +
+            `Batasan: ${config.limitations}\n` +
+            (username.toLowerCase() === "ryy" || message.author.id === process.env.RYY_USER_ID
+              ? `${config.ryy_special_behavior}\n`
+              : `${config.other_users_behavior}\n`);
 
           let fullPrompt = context + "\n\nRiwayat percakapan:\n";
           for (const msg of conversation.messages) {
@@ -307,9 +280,43 @@ client.on(Events.MessageCreate, async (message) => {
           const text = response.text();
 
           if (text) {
+            // Fungsi untuk memformat teks agar lebih menarik di Discord
+            const cleanAndFormatText = (inputText) => {
+              if (!inputText) return '';
+              
+              // Hapus instruksi konteks yang tidak perlu
+              let cleaned = inputText.replace(/\(Balaslah sesuai kepribadian dan aturan di atas.*?\)/g, '');
+              cleaned = cleaned.replace(/\(dengan mempertimbangkan riwayat percakapan\)/g, '');
+              
+              // Hapus baris kosong berlebihan
+              cleaned = cleaned.replace(/\n\s*\n\s*\n/g, '\n\n');
+              
+              // Format kata-kata penting dengan bold di Discord (menggunakan **)
+              // Tambahkan ** di sekitar kata-kata penting
+              const importantWords = ['Neko', 'AI', 'Discord', 'server', 'asisten', 'tsundere', 'Blade Ball', 'Ryy', 'anime', 'Roblox', 'minna-san', 'baka', 'nani', 'urusai', 'tugas'];
+              
+              importantWords.forEach(word => {
+                // Gunakan regex untuk mengganti kata penting dengan format bold
+                const regex = new RegExp(`\\b(${word})\\b`, 'gi');
+                cleaned = cleaned.replace(regex, '**$1**');
+              });
+              
+              // Trim whitespace di awal dan akhir
+              cleaned = cleaned.trim();
+              
+              return cleaned;
+            };
+
+            let formattedText = cleanAndFormatText(text);
+            
+            // Pastikan teks tidak melebihi batas maksimum Discord (2000 karakter)
+            if (formattedText.length > 1950) {
+              formattedText = formattedText.substring(0, 1950) + '... [pesan dipotong karena terlalu panjang]';
+            }
+            
             conversation.messages.push({
               role: "model",
-              content: text,
+              content: text, // Simpan teks asli ke database
             });
 
             if (conversation.messages.length > 20) {
@@ -318,7 +325,7 @@ client.on(Events.MessageCreate, async (message) => {
 
             await conversation.save();
 
-            await message.reply(text);
+            await message.reply(formattedText);
           } else {
             await message.reply("I couldn't generate a response.");
           }
@@ -345,9 +352,8 @@ client.on(Events.MessageCreate, async (message) => {
           }
         }
       } else {
-        await message.reply(
-          "Hai! Aku Neko, asisten anime yang tsundere! Tanya aku apa saja ya~ ٩(◕‿◕｡)۶"
-        );
+        // Panggil fungsi untuk menangani kata kunci dari file terpisah
+        await handleKeywordCommands(message, config);
       }
     } catch (error) {
       Logger.error(

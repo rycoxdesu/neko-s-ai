@@ -94,3 +94,4 @@ delete-commands.js
 register-commands.js
 update-config-v2.js
 update-config.js
+test.js
