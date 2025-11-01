@@ -8,6 +8,7 @@ const {
   Routes,
 } = require("discord.js");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 const { v4: uuidv4 } = require("uuid");
@@ -16,8 +17,9 @@ const connectDB = require("./config/database");
 const Logger = require("./utils/logger");
 const DiscordLogger = require("./utils/discordLogger");
 const Conversation = require("./config/conversation");
-const ConfigManager = require('./utils/ConfigManager');
-const { handleKeywordCommands } = require('./utils/keywordCommands');
+const ConfigManager = require("./utils/ConfigManager");
+const { handleKeywordCommands } = require("./commands/roleCommands");
+const { handleClearCommand } = require("./commands/clearCommand");
 
 const client = new Client({
   intents: [
@@ -38,7 +40,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 // const commandFiles = fs
 //   .readdirSync(commandsPath)
 //   .filter((file) => file.endsWith(".js"));
-// 
+//
 // for (const file of commandFiles) {
 //   const filePath = path.join(commandsPath, file);
 //   const command = require(filePath);
@@ -57,7 +59,7 @@ client.once(Events.ClientReady, async () => {
   try {
     const configManager = new ConfigManager();
     const config = await configManager.readConfig();
-    console.log('Konfigurasi Global dari file JSON:', {
+    console.log("Konfigurasi Global dari file JSON:", {
       name: config.name,
       role: config.role,
       personality: config.personality,
@@ -74,21 +76,21 @@ client.once(Events.ClientReady, async () => {
   //   const commandFiles = fs
   //     .readdirSync(commandsPath)
   //     .filter((file) => file.endsWith(".js"));
-  // 
+  //
   //   for (const file of commandFiles) {
   //     const filePath = path.join(commandsPath, file);
   //     const command = require(filePath);
   //     commands.push(command.data.toJSON());
   //   }
-  // 
+  //
   //   const rest = new REST({ version: "10" }).setToken(
   //     process.env.DISCORD_TOKEN
   //   );
-  // 
+  //
   //   Logger.log(
   //     `Started refreshing ${commands.length} application (/) commands.`
   //   );
-  // 
+  //
   //   const data = await rest.put(
   //     Routes.applicationGuildCommands(
   //       process.env.CLIENT_ID,
@@ -96,7 +98,7 @@ client.once(Events.ClientReady, async () => {
   //     ),
   //     { body: commands }
   //   );
-  // 
+  //
   //   Logger.log(
   //     `Successfully reloaded ${data.length} application (/) commands.`
   //   );
@@ -116,16 +118,16 @@ client.once(Events.ClientReady, async () => {
 
 // client.on(Events.InteractionCreate, async (interaction) => {
 //   if (!interaction.isChatInputCommand()) return;
-// 
+//
 //   const command = client.commands.get(interaction.commandName);
-// 
+//
 //   if (!command) {
 //     Logger.warn(`Command ${interaction.commandName} not found`);
 //     if (discordLogger)
 //       await discordLogger.warn(`Command ${interaction.commandName} not found`);
 //     return;
 //   }
-// 
+//
 //   try {
 //     await command.execute(interaction);
 //     Logger.log(
@@ -139,7 +141,7 @@ client.once(Events.ClientReady, async () => {
 //       await discordLogger.error(
 //         `Error executing command ${interaction.commandName}: ${error.message}`
 //       );
-// 
+//
 //     if (interaction.replied || interaction.deferred) {
 //       await interaction.followUp({
 //         content: "There was an error while executing this command!",
@@ -172,9 +174,79 @@ client.on(Events.MessageCreate, async (message) => {
     containsNeko
   ) {
     try {
-      // Periksa apakah pesan mengandung kata kunci neko add role sebelum melanjutkan
       const content = message.content.toLowerCase();
-      if (content.includes('neko add role')) {
+      // Periksa apakah pesan mengandung command neko clear/delete
+      if (
+        content.startsWith("neko clear") ||
+        content.startsWith("neko delete")
+      ) {
+        const configManager = new ConfigManager();
+        const config = await configManager.readConfig();
+        await handleClearCommand(message, config);
+        return; // Hentikan eksekusi di sini, jangan lanjut ke AI
+      }
+
+      // Periksa apakah pesan mengandung permintaan gambar
+      if (
+        content.includes("neko") &&
+        (content.includes("gambar") ||
+          content.includes("image") ||
+          content.includes("create")) &&
+        (content.includes("gambar") ||
+          content.includes("image") ||
+          content.includes("create"))
+      ) {
+        const configManager = new ConfigManager();
+        const config = await configManager.readConfig();
+
+        // Ekstrak prompt untuk gambar
+        let prompt = message.content.replace(/neko/gi, "").trim();
+        prompt = prompt.replace(/(gambar|image|create)/gi, "").trim();
+
+        if (prompt) {
+          try {
+            const botName = config.name || "Neko";
+
+            // Tampilkan indikator mengetik
+            await message.channel.sendTyping(); // Tampilkan indikator bahwa bot sedang mengetik
+
+            // Gunakan axios untuk mengakses API dan mendapatkan gambar
+            const imageUrl = `${
+              process.env.GEMINI_IMAGE_API_URL
+            }${encodeURIComponent(prompt)}`;
+
+            // Ambil gambar dari API
+            const response = await axios.get(imageUrl, {
+              responseType: "arraybuffer", // Ambil sebagai buffer
+            });
+
+            // Kirim gambar sebagai attachment
+            await message.reply({
+              files: [
+                {
+                  attachment: Buffer.from(response.data),
+                  name: `generated_image_${Date.now()}.png`, // Nama file dinamis
+                },
+              ],
+            });
+          } catch (error) {
+            console.error("Error creating image:", error);
+            const botName = config.name || "Neko";
+            await message.reply(
+              `- Maaf, ${botName} terjadi kesalahan saat mencoba membuat gambar. Mungkin prompt terlalu kompleks, server sedang sibuk, atau API tidak merespons dengan gambar yang valid.`
+            );
+          }
+        } else {
+          const botName = config.name || "Neko";
+          await message.reply(
+            `- ${botName} perlu prompt untuk membuat gambar! Contoh: "neko buatkan gambar kucing sedang coding"`
+          );
+        }
+        return; // Hentikan eksekusi di sini, jangan lanjut ke AI
+      }
+
+      // Periksa apakah pesan mengandung kata kunci neko add role sebelum melanjutkan
+      if (content.includes("neko add role")) {
         const configManager = new ConfigManager();
         const config = await configManager.readConfig();
         await handleKeywordCommands(message, config);
@@ -245,7 +317,7 @@ client.on(Events.MessageCreate, async (message) => {
             content: prompt,
           });
 
-          const context = 
+          const context =
             `Nama: ${config.name}\n` +
             `Role: ${config.role}\n` +
             `Kepribadian: ${config.personality}\n` +
@@ -255,7 +327,8 @@ client.on(Events.MessageCreate, async (message) => {
             `Format jawaban: ${config.format_response}\n` +
             `Panggilan: ${config.user_name.replace(/{user}/g, username)}\n` +
             `Batasan: ${config.limitations}\n` +
-            (username.toLowerCase() === "ryy" || message.author.id === process.env.RYY_USER_ID
+            (username.toLowerCase() === "ryy" ||
+            message.author.id === process.env.RYY_USER_ID
               ? `${config.ryy_special_behavior}\n`
               : `${config.other_users_behavior}\n`);
 
@@ -282,38 +355,62 @@ client.on(Events.MessageCreate, async (message) => {
           if (text) {
             // Fungsi untuk memformat teks agar lebih menarik di Discord
             const cleanAndFormatText = (inputText) => {
-              if (!inputText) return '';
-              
+              if (!inputText) return "";
+
               // Hapus instruksi konteks yang tidak perlu
-              let cleaned = inputText.replace(/\(Balaslah sesuai kepribadian dan aturan di atas.*?\)/g, '');
-              cleaned = cleaned.replace(/\(dengan mempertimbangkan riwayat percakapan\)/g, '');
-              
+              let cleaned = inputText.replace(
+                /\(Balaslah sesuai kepribadian dan aturan di atas.*?\)/g,
+                ""
+              );
+              cleaned = cleaned.replace(
+                /\(dengan mempertimbangkan riwayat percakapan\)/g,
+                ""
+              );
+
               // Hapus baris kosong berlebihan
-              cleaned = cleaned.replace(/\n\s*\n\s*\n/g, '\n\n');
-              
+              cleaned = cleaned.replace(/\n\s*\n\s*\n/g, "\n\n");
+
               // Format kata-kata penting dengan bold di Discord (menggunakan **)
               // Tambahkan ** di sekitar kata-kata penting
-              const importantWords = ['Neko', 'AI', 'Discord', 'server', 'asisten', 'tsundere', 'Blade Ball', 'Ryy', 'anime', 'Roblox', 'minna-san', 'baka', 'nani', 'urusai', 'tugas'];
-              
-              importantWords.forEach(word => {
+              const importantWords = [
+                "Neko",
+                "AI",
+                "Discord",
+                "server",
+                "asisten",
+                "tsundere",
+                "Blade Ball",
+                "Ryy",
+                "anime",
+                "Roblox",
+                "minna-san",
+                "baka",
+                "nani",
+                "urusai",
+                "tugas",
+              ];
+
+              importantWords.forEach((word) => {
                 // Gunakan regex untuk mengganti kata penting dengan format bold
-                const regex = new RegExp(`\\b(${word})\\b`, 'gi');
-                cleaned = cleaned.replace(regex, '**$1**');
+                const regex = new RegExp(`\\b(${word})\\b`, "gi");
+                cleaned = cleaned.replace(regex, "**$1**");
               });
-              
+
               // Trim whitespace di awal dan akhir
               cleaned = cleaned.trim();
-              
+
               return cleaned;
             };
 
             let formattedText = cleanAndFormatText(text);
-            
+
             // Pastikan teks tidak melebihi batas maksimum Discord (2000 karakter)
             if (formattedText.length > 1950) {
-              formattedText = formattedText.substring(0, 1950) + '... [pesan dipotong karena terlalu panjang]';
+              formattedText =
+                formattedText.substring(0, 1950) +
+                "... [pesan dipotong karena terlalu panjang]";
             }
-            
+
             conversation.messages.push({
               role: "model",
               content: text, // Simpan teks asli ke database
