@@ -20,6 +20,7 @@ const Conversation = require("./config/conversation");
 const ConfigManager = require("./utils/ConfigManager");
 const { handleKeywordCommands } = require("./commands/roleCommands");
 const { handleClearCommand } = require("./commands/clearCommand");
+const { handleHelpCommand } = require("./commands/helpCommand");
 
 const client = new Client({
   intents: [
@@ -175,6 +176,18 @@ client.on(Events.MessageCreate, async (message) => {
   ) {
     try {
       const content = message.content.toLowerCase();
+      // Periksa apakah pesan mengandung command neko help
+      if (
+        content === "neko help" ||
+        content === "neko bantuan" ||
+        content === "neko commands"
+      ) {
+        const configManager = new ConfigManager();
+        const config = await configManager.readConfig();
+        await handleHelpCommand(message, config);
+        return; // Hentikan eksekusi di sini, jangan lanjut ke AI
+      }
+
       // Periksa apakah pesan mengandung command neko clear/delete
       if (
         content.startsWith("neko clear") ||
