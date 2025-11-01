@@ -1,0 +1,30 @@
+{
+  "name": "neko-circle-ai-bot",
+  "version": "1.0.0",
+  "description": "An AI-powered Discord bot for Neko's Circle",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [
+    "discord",
+    "ai",
+    "bot",
+    "gemini",
+    "chatbot"
+  ],
+  "author": "Neko's Circle",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "@discordjs/rest": "^2.2.0",
+    "@discordjs/builders": "^1.7.0",
+    "@google/generative-ai": "^0.1.3",
+    "dotenv": "^16.4.5",
+    "mongoose": "^8.1.0",
+    "nodemon": "^3.0.2",
+    "chalk": "^5.3.0",
+    "uuid": "^9.0.1"
+  }
+}
